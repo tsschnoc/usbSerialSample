@@ -7,7 +7,7 @@
 
 
 var app = {
-    macAddress: "1519:20_0",  // get your mac address from bluetoothSerial.list
+    macAddress: "483:5740_0",  // get your mac address from bluetoothSerial.list
     chars: "",
 
 /*
@@ -23,6 +23,7 @@ var app = {
     bindEvents: function() {
         document.addEventListener('deviceready', this.onDeviceReady, false);
         connectButton.addEventListener('touchend', app.manageConnection, false);
+        sendButton.addEventListener('touchend', app.sendData, false);
     },
 
 /*
@@ -55,6 +56,12 @@ var app = {
             notEnabled
         );
     },
+
+
+    sendData: function() {
+    	var text = document.getElementById('usbcode').value + '\n';
+    	bluetoothSerial.write(text);
+	},
 /*
     Connects if not connected, and disconnects if connected:
 */

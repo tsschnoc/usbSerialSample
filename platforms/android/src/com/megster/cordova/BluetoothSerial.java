@@ -1,7 +1,10 @@
 package com.megster.cordova;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaArgs;
@@ -34,6 +37,8 @@ import android.util.Log;
 import com.hoho.android.usbserial.driver.UsbSerialDriver;
 import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.hoho.android.usbserial.driver.UsbSerialProber;
+import com.hoho.android.usbserial.util.SerialInputOutputManager;
+import com.hoho.android.usbserial.util.SerialInputOutputManager.Listener;
 
 /**
  * PhoneGap Plugin for Serial Communication over Bluetooth
@@ -118,11 +123,9 @@ public class BluetoothSerial extends CordovaPlugin {
 			callbackContext.success();
 
 		} else if (action.equals(WRITE)) {
-
 			String data = args.getString(0);
-			bluetoothSerialService.write(data.getBytes());
-			callbackContext.success();
 
+			writeSerial(data, callbackContext);
 		} else if (action.equals(AVAILABLE)) {
 
 			callbackContext.success(available());
@@ -183,6 +186,35 @@ public class BluetoothSerial extends CordovaPlugin {
 		return validAction;
 	}
 
+	/**
+	 * Write on the serial port
+	 * 
+	 * @param data
+	 *            the {@link String} representation of the data to be written on
+	 *            the port
+	 * @param callbackContext
+	 *            the cordova {@link CallbackContext}
+	 */
+	private void writeSerial(final String data,
+			final CallbackContext callbackContext) {
+		cordova.getThreadPool().execute(new Runnable() {
+			public void run() {
+				Log.d(TAG, data);
+				try {
+					byte[] buffer = data.getBytes();
+					Log.d(TAG, "writeSerialsent: " + data);
+					sPort.write(buffer, 1000);
+					callbackContext.success("sent bytes:  "
+							+ new String(buffer));
+				} catch (IOException e) {
+					// deal with error
+					Log.d(TAG, e.getMessage());
+					callbackContext.error(e.getMessage());
+				}
+			}
+		});
+	}
+
 	@Override
 	public void onDestroy() {
 		super.onDestroy();
@@ -196,18 +228,23 @@ public class BluetoothSerial extends CordovaPlugin {
 		Log.i(TAG, "listBondedDevices");
 		UsbManager mUsbManager = (UsbManager) cordova.getActivity()
 				.getSystemService(Context.USB_SERVICE);
-		// HashMap<String, UsbDevice> usbDeviceList =
-		// mUsbManager.getDeviceList();
+		HashMap<String, UsbDevice> usbDeviceList = mUsbManager.getDeviceList();
 
 		Log.i(TAG, "usbDeviceList");
 		JSONArray deviceList = new JSONArray();
 
 		List<UsbSerialDriver> drivers = UsbSerialProber.getDefaultProber()
 				.findAllDrivers(mUsbManager);
-
-		// for (String deviceName : usbDeviceList.keySet()) {
-		// Log.i(TAG, "usbDeviceList " + deviceName);
-		// UsbDevice device = usbDeviceList.get(deviceName);
+		/*
+		 * for (String deviceName : usbDeviceList.keySet()) { Log.i(TAG,
+		 * "usbDeviceList " + deviceName); UsbDevice device =
+		 * usbDeviceList.get(deviceName); JSONObject json = new JSONObject();
+		 * json.put("name", deviceName); json.put("address",
+		 * Integer.toHexString(device.getVendorId()) + ":" +
+		 * Integer.toHexString(device.getProductId())); json.put("id",
+		 * Integer.toHexString(device.getVendorId()) + ":" +
+		 * Integer.toHexString(device.getProductId())); deviceList.put(json); }
+		 */
 		for (UsbSerialDriver driver : drivers) {
 			UsbDevice device = driver.getDevice();
 
@@ -244,6 +281,58 @@ public class BluetoothSerial extends CordovaPlugin {
 		callbackContext.success(deviceList);
 	}
 
+	SerialInputOutputManager mSerialIoManager;
+	boolean light;
+	protected Listener mListener = new SerialInputOutputManager.Listener() {
+
+		@Override
+		public void onRunError(Exception e) {
+			Log.d(TAG, "Runner stopped.");
+		}
+
+		@Override
+		public void onNewData(final byte[] usbReceivedData) {
+			Log.d(TAG, "Runner onNewData. usbReceivedData: "
+					+ new String(usbReceivedData));
+
+			buffer.append(new String(usbReceivedData));
+
+			String c = delimiter;
+			String data = "";
+			int index = buffer.indexOf(c, 0);
+			while (index > -1) {
+				data = buffer.substring(0, index + c.length());
+				buffer.delete(0, index + c.length());
+				index = buffer.indexOf(c, 0);
+
+				
+				Log.d(TAG, "USB Date to subscriber: "
+						+ data);
+				if (dataAvailableCallback != null) {
+					PluginResult result = new PluginResult(
+							PluginResult.Status.OK, new String(data));
+					result.setKeepCallback(true);
+
+					dataAvailableCallback.sendPluginResult(result);
+					
+					
+				}
+			}
+
+		}
+	};
+
+	private final ExecutorService mExecutor = Executors
+			.newSingleThreadExecutor();
+
+	private void startIoManager() {
+		if (sPort != null) {
+			Log.i(TAG, "Starting io manager ..");
+			mSerialIoManager = new SerialInputOutputManager(sPort, mListener);
+			mExecutor.submit(mSerialIoManager);
+		}
+	}
+
 	private static final String ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION";
 	private final BroadcastReceiver mUsbReceiver = new BroadcastReceiver() {
 		@Override
@@ -259,29 +348,32 @@ public class BluetoothSerial extends CordovaPlugin {
 						if (device != null) {
 							Log.d(TAG, "permission granted for device "
 									+ device);
-							
-							UsbManager mUsbManager = (UsbManager) cordova.getActivity()
-									.getSystemService(Context.USB_SERVICE);
-							UsbDeviceConnection connection = mUsbManager.openDevice(sPort.getDriver().getDevice());
-							if (connection == null) {
-								notifyConnectionLost("Opening device failed");
-				                return;
-				            }
-							try {
-				                sPort.open(connection);
-				                sPort.setParameters(9600, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
-				            } catch (IOException e) {
-				                Log.e(TAG, "Error setting up device: " + e.getMessage(), e);
-				                notifyConnectionLost("Error opening device: " + e.getMessage());
-				                try {
-				                    sPort.close();
-				                } catch (IOException e2) {
-				                    // Ignore.
-				                }
-				                sPort = null;
-				                return;
-				            }
-							
+
+							openSerial();
+							/*
+							 * UsbManager mUsbManager = (UsbManager) cordova
+							 * .getActivity().getSystemService(
+							 * Context.USB_SERVICE); UsbDeviceConnection
+							 * connection = mUsbManager
+							 * .openDevice(sPort.getDriver().getDevice()); if
+							 * (connection == null) {
+							 * notifyConnectionLost("Opening device failed");
+							 * return; } try { sPort.open(connection);
+							 * sPort.setParameters(9600, 8,
+							 * UsbSerialPort.STOPBITS_1,
+							 * UsbSerialPort.PARITY_NONE); startIoManager();
+							 * 
+							 * //
+							 * mSerialIoManager.writeAsync("3*2;/n/r".getBytes
+							 * ()); notifyConnectionSuccess(); } catch
+							 * (IOException e) { Log.e(TAG,
+							 * "Error setting up device: " + e.getMessage(), e);
+							 * notifyConnectionLost("Error opening device: " +
+							 * e.getMessage()); try { sPort.close(); } catch
+							 * (IOException e2) { // Ignore. } sPort = null;
+							 * return; }
+							 */
+
 						}
 					} else {
 						Log.d(TAG, "permission denied for device " + device);
@@ -292,6 +384,47 @@ public class BluetoothSerial extends CordovaPlugin {
 			}
 		}
 	};
+
+	private void openSerial() {
+		cordova.getThreadPool().execute(new Runnable() {
+			public void run() {
+				UsbManager mUsbManager = (UsbManager) cordova.getActivity()
+						.getSystemService(Context.USB_SERVICE);
+				UsbDeviceConnection connection = mUsbManager.openDevice(sPort
+						.getDriver().getDevice());
+				if (connection != null) {
+					// get first port and open it
+
+					try {
+						sPort.open(connection);
+						// get connection params or the default values
+						int baudRate = 9600;
+						int dataBits = UsbSerialPort.DATABITS_8;
+						int stopBits = UsbSerialPort.STOPBITS_1;
+						int parity = UsbSerialPort.PARITY_NONE;
+						sPort.setParameters(baudRate, dataBits, stopBits,
+								parity);
+
+						startIoManager();
+
+					} catch (IOException e) {
+						// deal with error
+						Log.d(TAG, e.getMessage());
+						notifyConnectionLost(e.getMessage());
+					}
+
+					Log.d(TAG, "Serial port opened!");
+
+					notifyConnectionSuccess();
+				} else {
+					notifyConnectionLost("Cannot connect to the device!");
+				}
+
+			}
+
+		});
+	}
+
 	private UsbSerialPort sPort;
 
 	private void connect(CordovaArgs args, boolean secure,

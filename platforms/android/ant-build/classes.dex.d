@@ -23,6 +23,9 @@
 /Users/thomas.schnocklake/repos/usbSerialSample/platforms/android/ant-build/classes/com/hoho/android/usbserial/util/SerialInputOutputManager.class \
 /Users/thomas.schnocklake/repos/usbSerialSample/platforms/android/ant-build/classes/com/megster/cordova/BluetoothSerial$1.class \
 /Users/thomas.schnocklake/repos/usbSerialSample/platforms/android/ant-build/classes/com/megster/cordova/BluetoothSerial$2.class \
+/Users/thomas.schnocklake/repos/usbSerialSample/platforms/android/ant-build/classes/com/megster/cordova/BluetoothSerial$3.class \
+/Users/thomas.schnocklake/repos/usbSerialSample/platforms/android/ant-build/classes/com/megster/cordova/BluetoothSerial$4.class \
+/Users/thomas.schnocklake/repos/usbSerialSample/platforms/android/ant-build/classes/com/megster/cordova/BluetoothSerial$5.class \
 /Users/thomas.schnocklake/repos/usbSerialSample/platforms/android/ant-build/classes/com/megster/cordova/BluetoothSerial.class \
 /Users/thomas.schnocklake/repos/usbSerialSample/platforms/android/ant-build/classes/com/megster/cordova/BluetoothSerialService$AcceptThread.class \
 /Users/thomas.schnocklake/repos/usbSerialSample/platforms/android/ant-build/classes/com/megster/cordova/BluetoothSerialService$ConnectedThread.class \
